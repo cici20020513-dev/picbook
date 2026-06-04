@@ -1,0 +1,23 @@
+{
+  "name": "picbook",
+  "version": "1.0.0",
+  "description": "无障碍绘本阅读助手 - AI Agent for accessible picture book reading",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cici20020513-dev/picbook.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/cici20020513-dev/picbook/issues"
+  },
+  "homepage": "https://github.com/cici20020513-dev/picbook#readme",
+  "dependencies": {
+    "@vercel/speed-insights": "^2.0.0"
+  }
+}
