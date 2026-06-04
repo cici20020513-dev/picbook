@@ -1,38 +1,59 @@
-const { Headers } = require('undici');
-
-module.exports = async function handler(req, res) {
+module.exports = async (req, res) => {
+  // 设置跨域和流响应头
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Content-Type', 'text/event-stream;charset=utf-8');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
+  res.flushHeaders();
 
-  if (req.method === 'OPTIONS') return res.end();
-  if (req.method !== 'POST') return res.status(405).json({ err: '仅POST请求' });
+  // 预检请求直接返回
+  if (req.method === 'OPTIONS') {
+    return res.end();
+  }
 
-  const API_KEY = process.env.DASHSCOPE_API_KEY;
-  if (!API_KEY) return res.write(`data:{"msg":"密钥未配置"}\n\n`) && res.end();
+  // 只接受 POST
+  if (req.method !== 'POST') {
+    res.write(`data:{"error":"请使用POST请求"}\n\n`);
+    return res.end();
+  }
+
+  // 读取环境变量密钥
+  const apiKey = process.env.DASHSCOPE_API_KEY;
+  if (!apiKey) {
+    res.write(`data:{"error":"未配置DASHSCOPE_API_KEY"}\n\n`);
+    return res.end();
+  }
 
   try {
-    const buffers = [];
-    for await (const chunk of req) buffers.push(chunk);
-    const { messages } = JSON.parse(Buffer.concat(buffers).toString());
-
-    const upstream = await fetch("https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation", {
-      method: "POST",
+    // 请求阿里云通义千问
+    const response = await fetch('https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation', {
+      method: 'POST',
       headers: {
-        "Authorization": `Bearer ${API_KEY}`,
-        "Content-Type": "application/json"
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: "qwen-turbo",
-        input: { messages },
-        parameters: { result_format: "message", stream: true }
+        model: 'qwen-turbo',
+        input: { messages: req.body.messages },
+        parameters: {
+          result_format: 'message',
+          stream: true
+        }
       })
     });
 
-    upstream.body.pipe(res);
+    // 流式转发给前端（原生支持，不需要任何库）
+    response.body.on('data', (chunk) => {
+      res.write(chunk.toString());
+    });
+
+    response.body.on('end', () => {
+      res.end();
+    });
+
   } catch (err) {
-    res.write(`data:{"err":"${err.message}"}\n\n`);
+    res.write(`data:{"error":"接口异常：${err.message}"}\n\n`);
     res.end();
   }
+};
 };
