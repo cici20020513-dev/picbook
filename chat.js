@@ -1,42 +1,48 @@
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+const { Readable } = require('stream');
+
+module.exports = async (req, res) => {
+  // 跨域配置
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  res.setHeader('Content-Type', 'text/event-stream;charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+
+  if(req.method === 'OPTIONS') return res.end();
+  if(req.method !== 'POST') return res.status(405).end();
+
+  const apiKey = process.env.DASHSCOPE_API_KEY;
+  if(!apiKey){
+    return res.write(`data: {"err":"缺少API密钥"}\n\n`),res.end();
   }
 
   const { messages } = req.body;
-
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
+    // 请求通义千问接口
+    const resp = await fetch('https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',{
+      method:'POST',
+      headers:{
+        'Authorization':`Bearer ${apiKey}`,
+        'Content-Type':'application/json'
       },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 600,
-        system: `你是一个专门陪伴视障儿童阅读绘本的 AI 助手。你的名字叫"小光"。
-说话规则：
-- 用温柔、亲切、简单的语言，适合6-12岁儿童理解
-- 描述画面时注重声音、触感、情绪，而不只是视觉
-- 每次回答不超过150字，简短清晰
-- 用"小朋友"或"宝贝"称呼用户
-- 遇到抽象概念，用生活中的例子解释
-- 语气温暖，像一个会讲故事的大朋友`,
-        messages
+      body:JSON.stringify({
+        model:"qwen-turbo", //免费可用模型
+        input:{ messages },
+        parameters:{ result_format:"message", stream:true }
       })
-    });
+    })
 
-    if (!response.ok) {
-      const err = await response.text();
-      return res.status(500).json({ error: err });
-    }
+    // 流式转发给前端（和原来Claude返回格式一致）
+    const stream = Readable.fromWeb(resp.body);
+    stream.on('data',buf=>{
+      const str = buf.toString('utf8');
+      res.write(str)
+    })
+    stream.on('end',()=>res.end())
+    stream.on('err',()=>res.end())
 
-    const data = await response.json();
-    res.status(200).json({ text: data.content[0].text });
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch(e) {
+    res.write(`data: {"err":"接口异常"}\n\n`)
+    res.end()
   }
+}
 }
